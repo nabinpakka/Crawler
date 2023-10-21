@@ -47,7 +47,7 @@ def process_data(responses):
 
 
 def save_data(processed_data):
-    output_file = "nytimes.jsonl"
+    output_file = "nytimes_raw.jsonl"
     with open(output_file, 'a') as file:
         for data in processed_data:
             file.write(json.dumps(data))
