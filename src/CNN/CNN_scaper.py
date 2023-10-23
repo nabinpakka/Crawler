@@ -1,3 +1,5 @@
+import json
+
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
@@ -5,6 +7,14 @@ from selenium.webdriver.common.by import By
 from bs4 import BeautifulSoup
 import requests
 
+headers = {
+    'accept': '*/*',
+    'accept-encoding': 'gzip, deflate, br',
+    'accept-language': 'en-US,en;q=0.9',
+    'referer': 'https://www.google.com',
+    'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36'
+}
+template = 'https://www.cnn.com/{}'
 import time
 
 
@@ -46,32 +56,92 @@ import time
 #             break
 
 
-def beautifulsoup():
-    template = 'https://www.cnn.com/{}'
-    url = template.format("politics")
+def handle_individual_page(link="2023/10/22/politics/house-republican-speaker-race-who-is-running/index.html", topic = "politics"):
+    url = template.format(link)
 
-    headers = {
-        'accept': '*/*',
-        'accept-encoding': 'gzip, deflate, br',
-        'accept-language': 'en-US,en;q=0.9',
-        'referer': 'https://www.google.com',
-        'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36'
-    }
+    try:
+        response = get_beautified_response(url)
+        section = response.find("div", "layout__content-wrapper")
+        title_element = section.find("h1", "headline__text")
+        title = title_element.text
+
+        author_element = section.find("span", "byline__name")
+        author = author_element.text if author_element is not None else ""
+
+        publish_on_element = section.find("div", "timestamp")
+        published_on = publish_on_element.text if author_element is not None else ""
+
+        body_element = section.find("div", "article__content-container")
+        paragraphs = body_element.findAll("p", "inline-placeholder")
+
+        abstract = paragraphs[0].text if author_element is not None else ""
+        paragraphs.pop(0)
+
+        body = ""
+        for paragraph in paragraphs:
+            body += paragraph.text if author_element is not None else "" + "\n"
+
+        data = {
+            "title": title,
+            "author": author,
+            "published_on": published_on,
+            "abstract": abstract,
+            "body": body,
+            "url": url,
+            "section": topic
+        }
+        return data
+    except Exception as e:
+        print("An error has occurred: ", e)
+
+
+def get_beautified_response(url):
     response = requests.get(url, headers=headers)
-    soup = BeautifulSoup(response.text, 'lxml')
+    return BeautifulSoup(response.text, 'lxml')
 
+def extract_and_save_links(url, topic):
+
+    soup = get_beautified_response(url)
     section = soup.find("div", "zone--t-light")
+    if section is None:
+        # the response is emtpy
+        raise Exception("The response does not have any data.")
     cards = section.findAll("div", "stack")
-    print(cards)
 
-    for card in cards:
-        # find headline of the news article
-        link = card.find('a', 'container_lead-plus-headlines__link').text
-        print(link)
+    file_name = "CNN/CNN.jsonl"
+    with open(file_name, "a") as file:
+        for card in cards:
+            # find headline of the news article
+            links = card.findAll('a', 'container_lead-plus-headlines__link')
+            if len(links) > 2:
+                links.pop(0)
+            for link in links:
+                link_url = link.get("href")
+                link_url = link_url[1:]
+
+                try:
+                    data = handle_individual_page(link_url, topic)
+                    print(data)
+
+                    file.write(json.dumps(data))
+                    file.write("\n")
+                except Exception as e:
+                    print(e)
 
 
+def beautifulsoup(topic = "politics"):
+    url = template.format(topic)
+    extract_and_save_links(url, topic)
 
 if __name__ == '__main__':
-    beautifulsoup()
+
+    topics = ["politics", "us", "health", "entertainment", "style", "sport", "travel", "opinions","business"]
+
+    while True:
+        for topic in topics:
+            beautifulsoup(topic)
+        # get data every hour
+        time.sleep(3600)
+
 
 
